@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>相位织图</title>
+<style>
+:root { color-scheme: light; --ink:#17211d; --muted:#66736d; --line:#dfe7e2; --panel:#fbfdfb; --accent:#176b4d; --warn:#9a5b00; --error:#9d2f2f; }
+* { box-sizing: border-box; }
+body { margin:0; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--ink); background:#eef3ef; }
+header { padding:28px 32px 20px; background:#102c22; color:#f6faf7; }
+h1 { margin:0 0 8px; font-size:30px; }
+header p { margin:0; color:#c9d7cf; }
+main { padding:24px 32px 40px; display:grid; gap:18px; }
+.toolbar, section, .conflict, .candidate { background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 2px 10px rgba(0,0,0,.04); }
+.toolbar { padding:14px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+select, button, input { font:inherit; padding:8px 10px; border:1px solid #b9c7be; border-radius:8px; background:white; color:var(--ink); }
+button { cursor:pointer; background:var(--accent); color:white; border-color:var(--accent); }
+button.secondary { background:white; color:var(--accent); }
+button.danger { background:var(--error); border-color:var(--error); }
+.grid { display:grid; grid-template-columns:1.1fr .9fr; gap:18px; align-items:start; }
+section { padding:18px; min-width:0; }
+h2 { margin:0 0 14px; font-size:19px; }
+h3 { margin:14px 0 8px; font-size:15px; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th,td { border-bottom:1px solid var(--line); padding:7px 8px; text-align:left; vertical-align:top; }
+th { color:var(--muted); font-weight:650; }
+.tag { display:inline-block; padding:2px 7px; border-radius:999px; font-size:12px; background:#e5efe9; color:var(--accent); }
+.tag.warning { background:#fff1d6; color:var(--warn); }
+.tag.error { background:#fde4e4; color:var(--error); }
+.block { border:1px solid var(--line); border-radius:12px; padding:12px; margin:10px 0; }
+.candidate { padding:10px; margin:8px 0; background:white; }
+.conflict { padding:12px; margin:8px 0; background:white; border-left:4px solid var(--warn); }
+.conflict.error { border-left-color:var(--error); }
+.evidence { color:var(--muted); font-size:12px; line-height:1.5; }
+.pedigree { display:flex; gap:18px; align-items:end; flex-wrap:wrap; }
+.person { border:2px solid #7d9889; border-radius:14px; padding:10px 14px; min-width:110px; background:white; text-align:center; }
+.person small { display:block; color:var(--muted); margin-top:4px; }
+.relation { border-top:2px dashed #6f8c7d; flex:1; min-width:40px; margin-bottom:28px; }
+pre { white-space:pre-wrap; word-break:break-word; background:#f2f6f3; border-radius:8px; padding:10px; max-height:360px; overflow:auto; }
+@media (max-width: 900px) { .grid { grid-template-columns:1fr; } main,header { padding-left:14px; padding-right:14px; } }
+</style>
+</head>
+<body>
+<header><h1>相位织图</h1><p>离线家系基因型、相位块、冲突证据与可回放裁定</p></header>
+<main>
+<div class="toolbar">
+<label>输入版本 <select id="version"></select></label>
+<label>分支 <select id="branch"></select></label>
+<label>候选预算 <input id="budget" type="number" min="1" max="1024" style="width:110px"></label>
+<button onclick="loadState()">刷新分析</button>
+<button class="secondary" onclick="exportJson()">导出钉住版本与事件</button>
+</div>
+<div class="grid">
+<section><h2>Pedigree（仅本地匿名标识）</h2><div id="pedigree" class="pedigree"></div><h2>关系</h2><div id="relationships"></div></section>
+<section><h2>变异矩阵</h2><div id="matrix"></div></section>
+</div>
+<section><h2>Phase blocks</h2><div id="blocks"></div></section>
+<section><h2>冲突解释与最小恢复观测集</h2><div id="conflicts"></div></section>
+<section><h2>裁定事件与导出预览</h2><div id="events"></div><pre id="exportPreview">尚未导出</pre></section>
+</main>
+<script>
+let state = null;
+function qs(){ return new URLSearchParams({version:state?.selected_version || 'v1', branch:state?.selected_branch || 'main', budget:document.getElementById('budget').value || '64'}); }
+async function loadState(){
+  const version = document.getElementById('version').value || 'v1';
+  const branch = document.getElementById('branch').value || 'main';
+  const budget = document.getElementById('budget').value || '64';
+  const response = await fetch('/api/state?version='+encodeURIComponent(version)+'&branch='+encodeURIComponent(branch)+'&budget='+encodeURIComponent(budget));
+  if(!response.ok) { alert((await response.json()).error); return; }
+  state = await response.json(); render();
+}
+function fillSelect(id, values, selected){ const el=document.getElementById(id); el.innerHTML=values.map(v=>`<option ${v===selected?'selected':''}>${v}</option>`).join(''); }
+function esc(value){ return String(value ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function render(){
+  fillSelect('version', state.versions.map(v=>v.id), state.selected_version);
+  fillSelect('version', state.versions.map(v=>v.id), state.selected_version);
+  fillSelect('branch', state.branches.map(b=>b.id), state.selected_branch);
+  document.getElementById('budget').value = state.analysis.candidate_budget;
+  document.getElementById('pedigree').innerHTML = state.analysis.samples.map(s=>`<div class="person"><strong>${esc(s.anonymous_id)}</strong><small>${esc(s.id)} · ${esc(s.sex)}</small></div>`).join('<div class="relation"></div>');
+  document.getElementById('relationships').innerHTML = table(['ID','子女','父亲','母亲','状态','权重'], state.analysis.relationships.map(r=>[r.id,r.child_id,r.father_id||'?',r.mother_id||'?',r.status,r.weight]));
+  const sampleIds = state.analysis.samples.map(s=>s.id);
+  const rows = state.analysis.variants.map(v=>{
+    const row=[`${v.chromosome}:${v.position}<br><small>${v.reference}/${v.alternate}</small>`];
+    for(const sid of sampleIds){ const g=state.analysis.pinned_version && lookupGenotype(sid,v.id); row.push(g); }
+    return row;
+  });
+  document.getElementById('matrix').innerHTML = table(['变异',...sampleIds], rows);
+  document.getElementById('blocks').innerHTML = state.analysis.blocks.map(blockHtml).join('') || '<p>当前版本没有杂合相位节点。</p>';
+  document.getElementById('conflicts').innerHTML = state.analysis.conflicts.map(conflictHtml).join('') || '<p>未发现冲突。</p>';
+  document.getElementById('events').innerHTML = table(['Seq','分支','钉住版本','裁定','父事件'], state.analysis.effective_events.concat(state.analysis.stale_events).map(e=>[e.seq,e.branch_id,e.pinned_version,JSON.stringify(e.decision),e.parent_event_id||'—']));
+}
+function lookupGenotype(sampleId, variantId){ return state.analysis.samples ? sampleId : ''; }
+function table(headers, rows){ return `<table><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${row.map(cell=>`<td>${cell}</td>`).join('')}</tr>`).join('')}</tbody></table>`; }
+function blockHtml(block){
+  const buttons = `<button class="secondary" onclick="withdrawDialog()">撤回 read link</button>`;
+  return `<div class="block"><h3>${esc(block.id)} <span class="tag">${esc(block.sample_id)} · ${esc(block.chromosome)}</span></h3><p>${block.variant_ids.map(esc).join(' → ')}</p>${block.bridge_evidence.map(b=>`<div class="evidence">桥接：${esc(b.read_link_id)} 合并 ${esc(b.from_component)} 与 ${esc(b.to_component)}</div>`).join('')}${block.candidates.map(candidateHtml(block)).join('')}${buttons}</div>`;
+}
+function candidateHtml(block){ return c=>`<div class="candidate"><strong>${esc(c.id)}</strong> <span class="tag ${c.tied?'warning':''}">score ${c.score}${c.tied?' · 并列':''}${c.budget_exhausted?' · 预算耗尽':''}</span>${c.accepted?' <span class="tag">已接受</span>':''}${c.locked?' <span class="tag">已锁定</span>':''}<table><tr>${c.assignments.map(a=>`<td><strong>${esc(a.variant_id)}</strong><br>${esc(a.haplotype0_allele)} | ${esc(a.haplotype1_allele)}</td>`).join('')}</tr></table><div class="evidence">支持：${c.supporting_observations.map(e=>esc(e.observation_id)+'('+e.weight+')').join(', ')}</div><div class="evidence">忽略：${c.ignored_observations.map(e=>esc(e.observation_id)+'('+e.weight+')').join(', ')||'无'}</div>${!c.accepted?`<button onclick="acceptCandidate('${esc(block.id)}','${esc(c.id)}')">接受候选</button>`:''}</div>`; }
+function conflictHtml(c){ return `<div class="conflict ${esc(c.severity)}"><strong>${esc(c.kind)}</strong> <span class="tag ${esc(c.severity)}">${esc(c.severity)}</span><p>${esc(c.message)}</p><div class="evidence">涉及：${c.involved_observations.map(esc).join(', ')}</div><div class="evidence">任一最小恢复集：${c.minimum_restoring_sets.map(set=>'{' + set.map(esc).join(',') + '}').join(' 或 ')}</div></div>`; }
+async function postDecision(decision){
+  const parent = state.analysis.effective_events.at(-1)?.id || null;
+  const response = await fetch('/api/decisions', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({branch:state.selected_branch, version:state.selected_version, parent_event_id:parent, decision})});
+  if(!response.ok) { alert((await response.json()).error); return; }
+  await loadState();
+}
+function acceptCandidate(blockId,candidateId){ postDecision({kind:'accept_candidate', block_id:blockId, candidate_id:candidateId}); }
+function withdrawDialog(){ const id=prompt('输入要撤回的 read link id（只影响该桥接区域）：'); if(id) postDecision({kind:'withdraw_read_link', read_link_id:id, reason:'人工复核撤回'}); }
+async function exportJson(){ const response=await fetch('/api/export?version='+state.selected_version+'&branch='+state.selected_branch); const data=await response.json(); document.getElementById('exportPreview').textContent=JSON.stringify(data,null,2); }
+document.getElementById('version').addEventListener('change', loadState);
+document.getElementById('branch').addEventListener('change', loadState);
+document.getElementById('budget').value='64';
+loadState();
+</script>
+</body>
+</html>
