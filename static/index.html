@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>相位织图</title>
+<style>
+:root{color-scheme:light;--bg:#f6f7fb;--panel:#fff;--ink:#182033;--muted:#667085;--line:#d9deea;--brand:#3157d5;--soft:#eaf0ff;--warn:#fff4d6;--bad:#ffe8e6;--ok:#dff7e9}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}header{padding:24px 28px;background:#17234a;color:white}h1{margin:0;font-size:28px;letter-spacing:.08em}.subtitle{color:#c9d3f4;margin-top:4px}main{padding:20px;display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,.7fr);gap:16px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 8px 24px rgba(21,35,74,.06)}h2{font-size:17px;margin:0 0 12px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}.full{grid-column:1/-1}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}button,.button{border:0;border-radius:9px;background:var(--brand);color:#fff;padding:8px 12px;font-weight:600;cursor:pointer}button.secondary{background:#eef1f7;color:#26314b}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px solid var(--line);padding:7px;text-align:left;vertical-align:top}th{color:#4b5670;background:#f8faff}.tag{display:inline-block;padding:2px 7px;border-radius:99px;background:var(--soft);color:#2746a8;font-weight:650}.tag.warn{background:var(--warn)}.tag.bad{background:var(--bad)}.tag.ok{background:var(--ok)}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.muted{color:var(--muted)}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.metric{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fbfcff}.metric strong{display:block;font-size:22px}.candidate{border:1px solid var(--line);border-radius:12px;padding:10px;margin:8px 0;background:#fcfcff}.candidate.tied{border-color:#e0b23a;background:#fffdf5}.evidence{font-size:12px;color:#475467}.conflict{border-left:4px solid #d92d20;background:#fff8f7;padding:10px;border-radius:8px;margin:8px 0}.conflict.review{border-color:#d98b06;background:#fffcf2}.conflict.warning{border-color:#b7791f;background:#fffdf5}form.inline{display:contents}input,select{border:1px solid var(--line);border-radius:8px;padding:8px;background:white;color:var(--ink)}#toast{position:fixed;right:20px;bottom:20px;background:#17234a;color:white;padding:10px 14px;border-radius:10px;display:none}@media(max-width:980px){main{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><h1>相位织图</h1><div class="subtitle">离线家系基因型与单倍型分相审阅 · 只显示本地匿名标识</div></header>
+<main>
+<section class="panel full">
+  <div class="toolbar">
+    <button onclick="load()">刷新</button>
+    <button class="secondary" onclick="rollback()">回退最后裁定</button>
+    <button class="secondary" onclick="fork()">创建裁定分支</button>
+    <a class="button secondary" href="/api/export">导出重放包</a>
+    <span id="budget" class="tag"></span>
+  </div>
+  <div class="cards">
+    <div class="metric"><span class="muted">固定版本</span><strong id="version">-</strong></div>
+    <div class="metric"><span class="muted">Phase blocks</span><strong id="blocks">0</strong></div>
+    <div class="metric"><span class="muted">候选相位</span><strong id="candidates">0</strong></div>
+    <div class="metric"><span class="muted">冲突/证据隔离</span><strong id="conflicts">0</strong></div>
+    <div class="metric"><span class="muted">缺失/低质提示</span><strong id="warnings">0</strong></div>
+  </div>
+</section>
+<section class="panel"><h2>家系</h2><div id="pedigree"></div></section>
+<section class="panel"><h2>分支与裁定事件</h2><div id="branches"></div><div id="events"></div></section>
+<section class="panel full"><h2>变异矩阵</h2><div id="matrix"></div></section>
+<section class="panel full"><h2>Phase blocks、候选与桥接证据</h2><div id="blocks"></div></section>
+<section class="panel full"><h2>冲突解释：最小恢复观测集合</h2><div id="conflictsPanel"></div></section>
+</main>
+<div id="toast"></div>
+<script>
+let state=null;
+function esc(value){return String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function label(sampleId){const s=state.analysis.input.samples.find(x=>x.id===sampleId);return s?s.anonymous_label:sampleId}
+async function api(url,options){const r=await fetch(url,options);if(!r.ok){const e=await r.json().catch(()=>({error:r.statusText}));throw new Error(e.error||r.statusText)}return r.json()}
+async function load(){state=await api('/api/state');render();document.querySelectorAll('[data-branches]').forEach(async el=>{el.innerHTML=await renderBranches()})}
+async function decide(decision){try{await api('/api/decisions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(decision)});await load();toast('裁定已写入事件流')}catch(e){toast(e.message)}}
+async function rollback(){try{await api('/api/rollback',{method:'POST'});await load();toast('已创建回退分支')}catch(e){toast(e.message)}}
+async function fork(){const name=prompt('分支名称',`review-${Date.now()}`);if(!name)return;await api('/api/fork',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name})});await load()}
+async function selectBranch(id){await api(`/api/branches/${encodeURIComponent(id)}/select`,{method:'POST'});await load()}
+function toast(text){const el=document.getElementById('toast');el.textContent=text;el.style.display='block';setTimeout(()=>el.style.display='none',2400)}
+function render(){
+ const a=state.analysis;document.getElementById('version').textContent=a.input.version_id;document.getElementById('blocks').textContent=a.blocks.length;document.getElementById('candidates').textContent=a.candidates.length;document.getElementById('conflicts').textContent=a.conflicts.length;document.getElementById('warnings').textContent=a.warnings.length;
+ const budget=document.getElementById('budget');budget.textContent=a.budget_exhausted?'候选预算已达到：结果不是唯一解':'候选预算内完整枚举';budget.className='tag '+(a.budget_exhausted?'bad':'ok');
+ document.getElementById('pedigree').innerHTML='<table><tr><th>关系</th><th>子代</th><th>父亲</th><th>母亲</th><th>状态</th></tr>'+a.input.relationships.map(r=>`<tr><td class="mono">${esc(r.id)}</td><td>${esc(label(r.child))}</td><td>${esc(r.father?label(r.father):'缺失')}</td><td>${esc(r.mother?label(r.mother):'缺失')}</td><td>${r.status==='confirmed'?'<span class="tag ok">确认</span>':'<span class="tag warn">待确认</span>'}</td></tr>`).join('')+'</table>';
+ renderEvents();renderMatrix();renderBlocks();renderConflicts();
+}
+function renderEvents(){document.getElementById('events').innerHTML='<table><tr><th>#</th><th>类型</th><th>版本</th><th>内容</th></tr>'+state.events.map(e=>`<tr><td>${e.seq}</td><td>${esc(e.event_type)}</td><td class="mono">${esc(e.version_id)}</td><td class="mono">${esc(JSON.stringify(e.payload))}</td></tr>`).join('')+'</table>'}
+async function renderBranches(){const bs=await api('/api/branches');return '<select onchange="selectBranch(this.value)">'+bs.map(b=>`<option ${b.id===state.branch.id?'selected':''} value="${esc(b.id)}">${esc(b.name)} (${esc(b.version_id)})</option>`).join('')+'</select>'}
+function genotypeFor(sample,variant){const g=a0().input.genotypes.find(x=>x.sample===sample&&x.variant===variant&&!x.duplicate_observation);return !g?'<span class="muted">·</span>':g.missing?'<span class="tag warn">缺失</span>':g.triallelic()?'<span class="tag bad">三等位</span>':g.low_quality_heterozygous?`<span class="tag warn">${esc(g.alleles.join('/'))}?</span>`:esc(g.alleles.join('/'))}
+function a0(){return state.analysis}
+function renderMatrix(){const a=a0();const samples=a.input.samples;document.getElementById('matrix').innerHTML='<table><tr><th>变异</th><th>位置</th><th>批次</th>'+samples.map(s=>`<th>${esc(s.anonymous_label)}</th>`).join('')+'</tr>'+a.input.variants.map(v=>`<tr><td class="mono">${esc(v.id)}</td><td>${esc(v.chromosome)}:${v.position}</td><td>${esc(v.batch)}</td>${samples.map(s=>`<td>${genotypeFor(s.id,v.id)}</td>`).join('')}</tr>`).join('')+'</table>'}
+function renderBlocks(){const a=a0();document.getElementById('blocks').innerHTML=a.blocks.map(b=>{const cs=a.candidates.filter(c=>c.block_id===b.id);return `<div class="candidate"><h3>${esc(b.id)} <span class="tag">${esc(b.chromosome)}</span> <span class="muted">${b.nodes.length} 个杂合节点</span></h3><p class="evidence">桥接：${b.bridge_evidence.map(e=>`${esc(e.observation_id)} (${e.weight})`).join('， ')||'无'}</p>${cs.map(c=>candidateHtml(b,c)).join('')}</div>`}).join('')}
+function candidateHtml(block,c){const accepted=state.analysis.overlay.accepted_candidates[block.id]===c.id;return `<div class="candidate ${c.tied?'tied':''}"><b>${esc(c.id)}</b> <span class="tag ${c.tied?'warn':'ok'}">得分 ${c.score}${c.tied?' · 并列':''}</span> ${accepted?'<span class="tag ok">已接受</span>':''}<p>${Object.entries(c.orientation).map(([v,al])=>`${esc(v)}: <b>${esc(al.join(' | '))}</b>`).join('　')}</p><p class="evidence">支持观测：${c.support.map(x=>esc(x.observation_id)).join(', ')||'无'}</p><p class="evidence">忽略数据：${c.ignored.map(x=>esc(x.observation_id)).join(', ')||'无'}</p>${c.de_novo.map(d=>`<span class="tag warn">de novo: ${esc(d.allele)} / ${esc(d.genotype_id)}</span>`).join(' ')}<div class="toolbar"><button onclick='decide({type:"accept_candidate",block_id:${JSON.stringify(block.id)},candidate_id:${JSON.stringify(c.id)}})'>接受候选</button>${Object.entries(c.orientation).slice(0,1).map(([v,al])=>`<button class="secondary" onclick='decide({type:"lock_phase",block_id:${JSON.stringify(block.id)},variant_id:${JSON.stringify(v)},allele_a:${JSON.stringify(al[0])},allele_b:${JSON.stringify(al[1])}})'>钉住首个局部相位</button>`).join('')}</div></div>`}
+function renderConflicts(){const a=a0();const all=[...a.conflicts.map(x=>['conflict',x]),...a.warnings.map(x=>['warning',x])];document.getElementById('conflictsPanel').innerHTML=all.map(([type,x])=>`<div class="conflict ${esc(x.severity||type)}"><b>${esc(x.kind)}</b> ${esc(x.description)}<p>观测：${x.observations.map(id=>`<span class="tag">${esc(id)}</span>`).join(' ')}</p>${(x.minimal_repairs||[]).map(r=>`<details><summary>最小修复集合：${r.observation_ids.map(esc).join(', ')}</summary><p>${esc(r.restored_constraint)}</p></details>`).join('')}</div>`).join('')||'<p class="muted">无冲突。</p>'}
+load();
+</script>
+</body>
+</html>
