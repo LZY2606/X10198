@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>相位织图</title>
+<style>
+:root{color-scheme:light;--ink:#172033;--muted:#667085;--line:#d8dee9;--blue:#2458a8;--bg:#f6f8fb;--card:#fff;--red:#b42318;--amber:#b54708;--green:#067647}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}
+header{padding:22px 28px;background:linear-gradient(120deg,#123a75,#2b6cb0);color:#fff}h1{margin:0;font-size:28px;letter-spacing:.08em}header p{margin:6px 0 0;opacity:.86}
+main{padding:20px 28px 40px;display:grid;gap:16px}.grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px}@media(max-width:980px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 8px 24px rgba(16,24,40,.05)}
+h2{font-size:17px;margin:0 0 12px}.muted{color:var(--muted)}.badges{display:flex;flex-wrap:wrap;gap:8px}.badge{border:1px solid var(--line);border-radius:999px;padding:3px 9px;background:#f9fafb;font-size:12px}
+.badge.hard{color:var(--red);border-color:#fecdca;background:#fff1f0}.badge.review{color:var(--amber);border-color:#fedf89;background:#fffaeb}.badge.ok{color:var(--green);border-color:#abefc6;background:#ecfdf3}
+table{border-collapse:collapse;width:100%;font-size:12px}th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}th{color:#475467;background:#f9fafb;position:sticky;top:0}.scroll{max-height:390px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+.pedigree{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap}.person{border:2px solid #8aa4c8;border-radius:12px;padding:10px 14px;min-width:120px;text-align:center;background:#f8fbff}.person.child{border-color:#7a5af8;background:#f7f5ff}.linkline{height:2px;background:#8aa4c8;flex:1;min-width:30px;margin-top:42px}
+pre{white-space:pre-wrap;word-break:break-word;background:#0b1220;color:#d1e7ff;border-radius:10px;padding:12px;max-height:320px;overflow:auto}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.pillrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+button{border:1px solid #b8c7dc;background:#fff;border-radius:8px;padding:6px 10px;cursor:pointer}button:hover{border-color:var(--blue);color:var(--blue)}input,select{border:1px solid #b8c7dc;border-radius:8px;padding:7px;background:#fff;min-width:120px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+label{font-size:12px;color:var(--muted);display:grid;gap:3px}.candidate{border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0}.candidate.accepted{border-color:#75e0a8;background:#f0fdf4}.kv{display:grid;grid-template-columns:110px 1fr;gap:4px 10px}.conflict{border-left:4px solid #f04438;padding:8px 10px;margin:8px 0;background:#fff}.conflict.review{border-left-color:#f79009}.block{border:1px solid var(--line);border-radius:10px;padding:12px;margin:10px 0}
+</style>
+</head>
+<body>
+<header><h1>相位织图</h1><p>离线家系基因型与单倍型分相审阅 · 本地匿名标识 · 不访问外部参考库</p></header>
+<main>
+<section class="grid">
+<div class="card"><h2>谱系与输入版本</h2><div id="pedigree" class="pedigree"></div><div id="versions" class="pillrow"></div></div>
+<div class="card">
+<h2>裁定操作</h2>
+<div class="toolbar">
+<label>当前/新分支<input id="branchName" placeholder="review-a"></label><button onclick="createBranch()">创建分支</button><button onclick="switchBranch()">切换分支</button>
+</div>
+<div class="toolbar">
+<button onclick="load()">刷新</button>
+<label>钉住版本<input id="pinVersion" type="number" min="1"></label><button onclick="pinVersion()">钉住</button>
+<label>撤回 read link<input id="linkId" placeholder="read-fa-12"></label><button onclick="withdrawLink()">撤回</button>
+</div>
+<div class="toolbar">
+<label>锁定样本<input id="lockSample" placeholder="S-CH"></label><label>变异<input id="lockVariant" placeholder="v1"></label>
+<label>A 来源<select id="lockOrigin"><option>father</option><option>mother</option></select></label><button onclick="lockPhase()">锁定局部</button>
+</div>
+<div class="toolbar">
+<label>关系 ID<input id="relId" placeholder="rel-trio"></label><button onclick="markUncertain()">标记待确认</button>
+<button onclick="exportJson()">导出 JSON</button><button onclick="showReplay()">查看重放</button>
+</div>
+<p class="muted">接受候选请使用每个候选旁的按钮；所有操作只追加分支事件，可回退。</p>
+</div>
+</section>
+<section class="card"><h2>变异矩阵</h2><div class="scroll"><table id="matrix"></table></div></section>
+<section class="grid"><div class="card"><h2>Phase Blocks</h2><div id="blocks"></div></div><div class="card"><h2>冲突解释</h2><div id="conflicts"></div></div></section>
+<section class="grid"><div class="card"><h2>被忽略数据</h2><div class="scroll"><table id="ignored"></table></div></div><div class="card"><h2>裁定事件 / 分支重放</h2><div class="scroll"><table id="decisions"></table></div></div></section>
+<section class="card"><h2>导出或重放结果</h2><pre id="output">等待操作……</pre></section>
+</main>
+<script>
+let state=null;
+function esc(v){return String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+async function api(path,options){const r=await fetch(path,{headers:{'content-type':'application/json'},...options});const data=await r.json();if(!r.ok)throw new Error(data.error||r.statusText);return data}
+async function load(){try{state=await api('/api/state');render()}catch(e){document.getElementById('output').textContent=e.message}}
+function render(){renderVersions();renderPedigree();renderMatrix();renderBlocks();renderConflicts();renderIgnored();renderDecisions()}
+function renderVersions(){document.getElementById('versions').innerHTML=state.versions.map(v=>`<span class="badge ${v.pinned?'ok':''}">版本 ${v.version}: ${esc(v.batch_id)} ${v.pinned?'已钉住':''}</span>`).join('')+`<span class="badge">分支 ${esc(state.branch)}</span><span class="badge">候选预算 ${state.budget}</span>`}
+function renderPedigree(){const rels=state.relationships.filter(r=>r.father_id||r.mother_id);document.getElementById('pedigree').innerHTML=state.samples.map(s=>`<div class="person ${rels.some(r=>r.child_id===s.id)?'child':''}"><b>${esc(s.id)}</b><br><span class="muted">${esc(s.label)}</span><br><span class="badge">v${s.version}</span></div>`).join('<div class="linkline"></div>')}
+function genotypeAt(sample,variant){return state.genotypes.find(g=>g.sample_id===sample&&g.variant_id===variant)}
+function renderMatrix(){const samples=state.samples, variants=state.variants;document.getElementById('matrix').innerHTML='<tr><th>样本</th>'+variants.map(v=>`<th>${esc(v.chrom)}:${v.position}<br><span class="muted">${esc(v.variant_id)}</span></th>`).join('')+'</tr>'+samples.map(s=>`<tr><td><b>${esc(s.id)}</b></td>${variants.map(v=>{const g=genotypeAt(s.id,v.id);if(!g)return '<td class="muted">—</td>';const cls=g.is_missing?'review':g.quality!=='high'?'review':g.alleles.some(a=>a!==v.reference&&a!==v.alternate)?'hard':'';return `<td><span class="badge ${cls}">${g.is_missing?'缺失':esc(g.alleles.join('/'))}</span><br><span class="muted">${esc(g.quality)} ${g.likelihood}</span></td>`}).join('')}</tr>`).join('')}
+function renderBlocks(){document.getElementById('blocks').innerHTML=state.blocks.map(b=>{const warning=b.budget_reached?`<span class="badge hard">达到候选预算，不伪装为唯一解</span>`:'';return `<div class="block"><h3>${esc(b.block_id)} <span class="muted">${esc(b.chrom)} · ${b.nodes.length} 节点 · ${b.candidates.length} 个并列候选</span> ${warning}</h3><div class="muted">节点：${b.nodes.map(n=>esc(n.sample_id+':'+n.variant_id)).join('，')}</div>${b.bridge_evidence.map(x=>`<div class="badge ok">桥接 ${esc(x.observation_id)}：${esc(x.left_block)} ↔ ${esc(x.right_block)}</div>`).join('')}${b.candidates.map(c=>`<div class="candidate ${c.accepted?'accepted':''}"><b>${esc(c.candidate_id)}</b> 得分 ${c.score.toFixed(2)} ${c.label_swap_equivalent?'<span class="badge review">父源/母源翻转等价</span>':''} ${c.accepted?'<span class="badge ok">已接受</span>':''}<br><span class="mono">${esc(c.signature)} ${esc(JSON.stringify(c.orientation))}</span><br><button onclick="acceptCandidate('${esc(b.block_id)}','${esc(c.signature)}')">接受候选</button></div>`).join('')}</div>`}).join('')}
+function renderConflicts(){document.getElementById('conflicts').innerHTML=state.conflicts.map(c=>`<div class="conflict ${c.severity==='review'?'review':''}"><b>${esc(c.kind)}</b> <span class="badge ${c.severity==='hard'?'hard':'review'}">${c.severity}</span>${c.resolved?' <span class="badge ok">已接受 de novo</span>':''}<p>${esc(c.explanation)}</p><div class="muted">${esc(c.variant_id)} ${esc(c.relationship_id)}</div><div>观测：${c.observations.map(x=>`<span class="badge">${esc(x)}</span>`).join(' ')}</div><div>最小恢复集合：${(c.minimal_repair_sets.length?c.minimal_repair_sets:[[]]).map(s=>`<span class="badge hard">[${s.map(esc).join(', ')}]</span>`).join(' ')}</div>${c.kind==='de_novo_candidate'?`<button onclick="acceptDenovo('${esc(c.conflict_id)}')">接受为 de novo</button>`:''}</div>`).join('')||'<p class="muted">无冲突</p>'}
+function renderIgnored(){const rows=state.ignored_observations;document.getElementById('ignored').innerHTML='<tr><th>观测</th><th>类型</th><th>原因</th><th>候选专属</th></tr>'+rows.map(x=>`<tr><td>${esc(x.observation_id)}</td><td>${esc(x.kind)}</td><td>${esc(x.reason)}</td><td>${x.candidate_specific?'是':'否'}</td></tr>`).join('')}
+function renderDecisions(){document.getElementById('decisions').innerHTML='<tr><th>ID</th><th>类型</th><th>版本</th><th>状态</th><th></th></tr>'+state.decisions.map(d=>`<tr><td>${d.event_id}</td><td>${esc(d.kind)}</td><td>${d.input_version??'全局'}</td><td>${d.effective?'有效':'已回退'} ${d.stale?'<br><span class="badge hard">旧版本并发裁定</span>':''}</td><td>${d.effective?`<button onclick="rollback(${d.event_id})">回退</button>`:''}</td></tr>`).join('')}
+async function post(path,body){try{await api(path,{method:'POST',body:JSON.stringify(body)});await load()}catch(e){document.getElementById('output').textContent=e.message}}
+async function createBranch(){const name=document.getElementById('branchName').value.trim();if(!name)return;await post('/api/branches',{name,from_branch:state.branch});document.getElementById('branchName').value=''}
+async function switchBranch(){const branch=document.getElementById('branchName').value.trim()||'main';await post('/api/state',{branch})}
+function acceptCandidate(block,signature){post('/api/decisions',{kind:'accept_candidate',block_id:block,candidate_signature:signature,input_version:state.effective_version})}
+function withdrawLink(){post('/api/decisions',{kind:'withdraw_read_link',read_link_id:document.getElementById('linkId').value,input_version:state.effective_version})}
+function lockPhase(){post('/api/decisions',{kind:'lock_phase',sample_id:document.getElementById('lockSample').value,variant_id:document.getElementById('lockVariant').value,haplotype_a_origin:document.getElementById('lockOrigin').value,input_version:state.effective_version})}
+function markUncertain(){post('/api/decisions',{kind:'mark_relationship_uncertain',relationship_id:document.getElementById('relId').value,input_version:state.effective_version})}
+function acceptDenovo(id){post('/api/decisions',{kind:'accept_de_novo',conflict_id:id,input_version:state.effective_version})}
+function pinVersion(){post('/api/pin',{version:Number(document.getElementById('pinVersion').value)})}
+function rollback(id){post('/api/rollback',{event_id:id})}
+async function exportJson(){document.getElementById('output').textContent=JSON.stringify(await api('/api/export'),null,2)}
+async function showReplay(){document.getElementById('output').textContent=JSON.stringify(await api('/api/replay'),null,2)}
+load();
+</script>
+</body></html>
