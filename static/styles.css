@@ -1,0 +1,79 @@
+:root {
+  color-scheme: light;
+  --bg: #f4f1ea;
+  --panel: #fffdf8;
+  --ink: #1f2933;
+  --muted: #667085;
+  --line: #d8d0c3;
+  --accent: #176b5d;
+  --accent-soft: #dff3ee;
+  --warn: #9a5b00;
+  --bad: #a33b32;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+  padding: 28px 36px;
+  background: #173f38;
+  color: white;
+}
+h1 { margin: 0; font-size: 34px; letter-spacing: 0; }
+header p { margin: 6px 0 0; color: #d5e7e2; }
+main { padding: 24px 36px 40px; }
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 2px rgba(31, 41, 51, 0.06);
+}
+.panel h2 { margin: 0 0 14px; font-size: 18px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+button, select, .toolbar a {
+  border: 1px solid #7aa89f;
+  border-radius: 6px;
+  background: white;
+  color: #173f38;
+  padding: 8px 11px;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+button:hover, .toolbar a:hover { background: var(--accent-soft); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+.badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  margin: 1px;
+}
+.badge.warn { background: #fff0d6; color: var(--warn); }
+.badge.bad { background: #ffe3e0; color: var(--bad); }
+.block { border-top: 1px solid var(--line); padding: 14px 0; }
+.block:first-child { border-top: 0; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.small { color: var(--muted); font-size: 13px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.actions button { border-color: var(--line); background: #fff; color: var(--ink); padding: 6px 9px; }
+.error { color: var(--bad); }
+@media (max-width: 900px) {
+  header, .grid { display: block; }
+  .toolbar { margin-top: 16px; }
+  main { padding: 16px; }
+}

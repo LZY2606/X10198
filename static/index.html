@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>相位织图</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>相位织图</h1>
+      <p>离线家系单倍型分相 · 原始观测版本化 · 裁定可回退</p>
+    </div>
+    <div class="toolbar">
+      <select id="branchSelect" title="当前分支"></select>
+      <button id="branchButton">从当前点建分支</button>
+      <button id="rollbackButton">回退到导入点</button>
+      <a href="/api/export" download="phase-weave-export.json">导出裁定</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel status">
+      <h2>运行状态</h2>
+      <div id="status"></div>
+    </section>
+
+    <section class="grid">
+      <article class="panel">
+        <h2>Pedigree</h2>
+        <div id="pedigree"></div>
+      </article>
+      <article class="panel">
+        <h2>变异矩阵</h2>
+        <div id="matrix"></div>
+      </article>
+    </section>
+
+    <section class="panel">
+      <h2>Phase Blocks</h2>
+      <div id="blocks"></div>
+    </section>
+
+    <section class="grid">
+      <article class="panel">
+        <h2>冲突解释</h2>
+        <div id="conflicts"></div>
+      </article>
+      <article class="panel">
+        <h2>裁定事件</h2>
+        <div id="events"></div>
+      </article>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
